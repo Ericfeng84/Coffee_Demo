@@ -4,6 +4,7 @@
 
 - **后端**：基于 Spring Boot 的 REST API 服务器
 - **前端**：基于 React + TypeScript 的现代 Web 应用
+- **配送管理**：完整的配送批处理和生命周期管理系统
 
 ## 📚 项目概述
 
@@ -133,18 +134,26 @@
 建造者模式将复杂对象的构建与它的表示分离，使得同样的构建过程可以创建不同的表示。在本项目中，我们使用建造者模式的变体（工厂方法）来创建订单对象，这样可以确保在创建订单时所有必要的字段都被正确设置，并且可以进行业务规则验证。
 
 ### 5. 仓储模式（Repository Pattern）
-**位置**：[`OrderRepository`](src/main/java/com/bluemountain/coffee/domain/repository/OrderRepository.java) 接口和 [`InMemoryOrderRepository`](src/main/java/com/bluemountain/coffee/infrastructure/persistence/InMemoryOrderRepository.java)
+**位置**：[`OrderRepository`](src/main/java/com/bluemountain/coffee/domain/repository/OrderRepository.java) 接口和 [`InMemoryOrderRepository`](src/main/java/com/bluemountain/coffee/infrastructure/persistence/InMemoryOrderRepository.java)、[`DeliveryRepository`](src/main/java/com/bluemountain/coffee/domain/repository/DeliveryRepository.java) 接口和 [`InMemoryDeliveryRepository`](src/main/java/com/bluemountain/coffee/infrastructure/persistence/InMemoryDeliveryRepository.java)
 
 抽象数据访问，允许轻松切换存储机制。
 
 **什么是仓储模式？**
-仓储模式用于将数据访问逻辑与业务逻辑分离。它提供了一个类似集合的接口来访问领域对象，而隐藏了底层数据存储的细节。在本项目中，仓储接口定义了保存、查找、删除订单的方法，而具体的实现可以是内存存储、数据库存储等，这样业务代码就不需要关心数据如何存储。
+仓储模式用于将数据访问逻辑与业务逻辑分离。它提供了一个类似集合的接口来访问领域对象，而隐藏了底层数据存储的细节。在本项目中，仓储接口定义了保存、查找、删除订单和配送的方法，而具体的实现可以是内存存储、数据库存储等，这样业务代码就不需要关心数据如何存储。
+
+### 6. 观察者模式（Observer Pattern）
+**位置**：[`OrderEventListener`](src/main/java/com/bluemountain/coffee/application/OrderEventListener.java)、[`DeliveryEventListener`](src/main/java/com/bluemountain/coffee/application/DeliveryEventListener.java)
+
+监听和处理领域事件，实现松耦合的事件驱动架构。
+
+**什么是观察者模式？**
+观察者模式定义对象间的一种一对多的依赖关系，当一个对象的状态发生改变时，所有依赖于它的对象都得到通知并被自动更新。在本项目中，当订单或配送的状态发生变化时，会发布相应的领域事件，事件监听器会订阅并处理这些事件，从而实现解耦的系统架构。
 
 ## 🎨 演示的面向对象原则
 
 ### 封装（Encapsulation）
-- 值对象（[`Money`](src/main/java/com/bluemountain/coffee/domain/model/valobj/Money.java)、[`Address`](src/main/java/com/bluemountain/coffee/domain/model/valobj/Address.java)）保护内部状态
-- 订单聚合通过私有构造函数强制执行业务规则
+- 值对象（[`Money`](src/main/java/com/bluemountain/coffee/domain/model/valobj/Money.java)、[`Address`](src/main/java/com/bluemountain/coffee/domain/model/valobj/Address.java)、[`RiderInfo`](src/main/java/com/bluemountain/coffee/domain/model/valobj/RiderInfo.java)）保护内部状态
+- 订单和配送聚合通过私有构造函数强制执行业务规则
 
 **什么是封装？**
 封装是将数据（属性）和操作数据的方法绑定在一起，并对外隐藏对象的内部实现细节。这样可以防止外部代码直接修改对象的内部状态，必须通过对象提供的方法来访问和修改数据，从而保证数据的一致性和安全性。
@@ -238,6 +247,26 @@ npm run dev
 | PUT | `/api/orders/{id}/complete` | 完成订单 |
 | DELETE | `/api/orders/{id}` | 取消订单 |
 
+### 配送管理
+
+| 方法 | 端点 | 描述 |
+|---------|-----------|-------------|
+| POST | `/api/deliveries/batch` | 创建配送批次 |
+| POST | `/api/deliveries/auto-batch` | 自动批量配送 |
+| POST | `/api/deliveries/{id}/assign-rider` | 分配骑手 |
+| POST | `/api/deliveries/{id}/pickup` | 标记为已取货 |
+| POST | `/api/deliveries/{id}/in-transit` | 标记为配送中 |
+| POST | `/api/deliveries/{id}/deliver` | 标记为已送达 |
+| POST | `/api/deliveries/{id}/complete` | 完成配送 |
+| POST | `/api/deliveries/{id}/cancel` | 取消配送 |
+| GET | `/api/deliveries/{id}` | 根据 ID 获取配送 |
+| GET | `/api/deliveries/status/{status}` | 根据状态获取配送 |
+| GET | `/api/deliveries/rider/{riderId}` | 根据骑手获取配送 |
+| GET | `/api/deliveries/order/{orderId}` | 根据订单获取配送 |
+| GET | `/api/deliveries/active` | 获取活跃配送 |
+| GET | `/api/deliveries/between` | 获取日期范围内的配送 |
+| GET | `/api/deliveries` | 获取所有配送 |
+
 ### 平台集成
 
 | 方法 | 端点 | 描述 |
@@ -305,6 +334,38 @@ curl http://localhost:8080/api/orders
 curl -X PUT "http://localhost:8080/api/orders/{id}/ready"
 ```
 
+### 创建配送批次
+
+```bash
+curl -X POST http://localhost:8080/api/deliveries/batch \
+  -H "Content-Type: application/json" \
+  -d '["order-id-1", "order-id-2"]'
+```
+
+### 自动批量配送
+
+```bash
+curl -X POST http://localhost:8080/api/deliveries/auto-batch
+```
+
+### 分配骑手
+
+```bash
+curl -X POST http://localhost:8080/api/deliveries/{deliveryId}/assign-rider \
+  -H "Content-Type: application/json" \
+  -d '{
+    "riderId": "RIDER-001",
+    "riderName": "张三",
+    "phoneNumber": "138-0000-0000"
+  }'
+```
+
+### 获取活跃配送
+
+```bash
+curl http://localhost:8080/api/deliveries/active
+```
+
 ## 📦 项目结构
 
 ### 后端项目结构
@@ -316,47 +377,70 @@ com.bluemountain.coffee
 │   ├── dto
 │   │   ├── CreateOrderCommand.java         # 创建订单的命令对象
 │   │   ├── OrderDTO.java                 # 订单数据传输对象
-│   │   └── OrderItemDTO.java            # 订单项数据传输对象
+│   │   ├── OrderItemDTO.java            # 订单项数据传输对象
+│   │   ├── DeliveryDTO.java            # 配送数据传输对象
+│   │   ├── DeliveryItemDTO.java        # 配送项数据传输对象
+│   │   └── RiderInfoDTO.java          # 骑手信息数据传输对象
 │   ├── web
-│   │   └── OrderController.java           # 订单 REST 控制器
+│   │   ├── OrderController.java           # 订单 REST 控制器
+│   │   └── DeliveryController.java        # 配送 REST 控制器
 │   └── platform
 │       └── PlatformController.java        # 平台集成控制器
 ├── application
 │   ├── OrderAppService.java               # 订单应用服务
 │   ├── OrderAssembler.java                # DTO 组装器
 │   ├── PricingStrategyFactory.java         # 定价策略工厂
-│   └── OrderEventListener.java            # 领域事件监听器
+│   ├── OrderEventListener.java            # 订单领域事件监听器
+│   ├── DeliveryAppService.java            # 配送应用服务
+│   └── DeliveryEventListener.java         # 配送领域事件监听器
 ├── domain
 │   ├── model
 │   │   ├── aggregate
 │   │   │   ├── Order.java               # 订单聚合根
-│   │   │   └── OrderItem.java          # 订单项实体
+│   │   │   ├── OrderItem.java          # 订单项实体
+│   │   │   ├── Delivery.java           # 配送聚合根
+│   │   │   └── DeliveryItem.java       # 配送项实体
 │   │   ├── valobj
 │   │   │   ├── Money.java               # 金额值对象
 │   │   │   ├── Address.java             # 地址值对象
-│   │   │   └── OrderId.java           # 订单 ID 值对象
+│   │   │   ├── OrderId.java           # 订单 ID 值对象
+│   │   │   ├── DeliveryId.java         # 配送 ID 值对象
+│   │   │   ├── RiderInfo.java          # 骑手信息值对象
+│   │   │   ├── DeliverySlip.java       # 配送单值对象
+│   │   │   └── DeliverySlipItem.java   # 配送单项值对象
 │   │   └── enums
 │   │       ├── OrderType.java            # 订单类型枚举
-│   │       └── OrderStatus.java         # 订单状态枚举
+│   │       ├── OrderStatus.java         # 订单状态枚举
+│   │       ├── DeliveryStatus.java      # 配送状态枚举
+│   │       └── DeliveryItemStatus.java  # 配送项状态枚举
 │   ├── service
-│   │   └── PricingStrategy.java         # 定价策略接口
+│   │   ├── PricingStrategy.java         # 定价策略接口
+│   │   └── DeliveryBatchService.java    # 配送批处理服务接口
 │   ├── strategy
 │   │   ├── DineInPricingStrategy.java  # 堂食定价策略
 │   │   └── DeliveryPricingStrategy.java # 外送定价策略
 │   ├── repository
-│   │   └── OrderRepository.java        # 订单仓储接口
+│   │   ├── OrderRepository.java        # 订单仓储接口
+│   │   └── DeliveryRepository.java     # 配送仓储接口
 │   ├── event
 │   │   ├── CoffeeReadyEvent.java       # 咖啡准备就绪领域事件
-│   │   └── OrderCreatedEvent.java     # 订单创建领域事件
+│   │   ├── OrderCreatedEvent.java     # 订单创建领域事件
+│   │   ├── DeliveryCreatedEvent.java   # 配送创建领域事件
+│   │   ├── DeliveryAssignedEvent.java  # 配送分配骑手领域事件
+│   │   ├── DeliveryPickedUpEvent.java  # 配送取货领域事件
+│   │   ├── DeliveryDeliveredEvent.java # 配送送达领域事件
+│   │   └── DeliveryCompletedEvent.java # 配送完成领域事件
 │   └── exception
 │       ├── DomainException.java         # 基础领域异常
 │       └── InvalidOrderStateException.java # 无效状态转换异常
 └── infrastructure
     ├── persistence
-    │   └── InMemoryOrderRepository.java # 内存仓储实现
+    │   ├── InMemoryOrderRepository.java # 订单内存仓储实现
+    │   └── InMemoryDeliveryRepository.java # 配送内存仓储实现
     └── service
         ├── PaymentService.java          # 模拟支付服务
-        └── NotificationService.java     # 模拟通知服务
+        ├── NotificationService.java     # 模拟通知服务
+        └── DeliveryBatchServiceImpl.java # 配送批处理服务实现
 ```
 
 ### 前端项目结构
@@ -412,37 +496,40 @@ frontend/
 订单上下文管理订单的整个生命周期。限界上下文是 DDD 中的一个核心概念，它定义了特定领域模型的边界。在限界上下文内部，所有的术语和概念都有明确的含义，不会产生歧义。
 
 #### 2. 聚合（Aggregates）
-[`Order`](src/main/java/com/bluemountain/coffee/domain/model/aggregate/Order.java) 作为聚合根，包含 [`OrderItem`](src/main/java/com/bluemountain/coffee/domain/model/aggregate/OrderItem.java) 实体。
+- [`Order`](src/main/java/com/bluemountain/coffee/domain/model/aggregate/Order.java) 作为聚合根，包含 [`OrderItem`](src/main/java/com/bluemountain/coffee/domain/model/aggregate/OrderItem.java) 实体
+- [`Delivery`](src/main/java/com/bluemountain/coffee/domain/model/aggregate/Delivery.java) 作为聚合根，包含 [`DeliveryItem`](src/main/java/com/bluemountain/coffee/domain/model/aggregate/DeliveryItem.java) 实体
 
 **什么是聚合？**
 聚合是一组相关对象的集合，它们作为一个整体被对待。聚合根是聚合的入口点，外部对象只能通过聚合根来访问聚合内部的实体。这样可以确保聚合内部的数据一致性，避免直接修改内部实体导致的数据不一致问题。
 
 #### 3. 值对象（Value Objects）
-由其属性定义的不可变对象（[`Money`](src/main/java/com/bluemountain/coffee/domain/model/valobj/Money.java)、[`Address`](src/main/java/com/bluemountain/coffee/domain/model/valobj/Address.java)、[`OrderId`](src/main/java/com/bluemountain/coffee/domain/model/valobj/OrderId.java)）。
+由其属性定义的不可变对象（[`Money`](src/main/java/com/bluemountain/coffee/domain/model/valobj/Money.java)、[`Address`](src/main/java/com/bluemountain/coffee/domain/model/valobj/Address.java)、[`OrderId`](src/main/java/com/bluemountain/coffee/domain/model/valobj/OrderId.java)、[`DeliveryId`](src/main/java/com/bluemountain/coffee/domain/model/valobj/DeliveryId.java)、[`RiderInfo`](src/main/java/com/bluemountain/coffee/domain/model/valobj/RiderInfo.java)、[`DeliverySlip`](src/main/java/com/bluemountain/coffee/domain/model/valobj/DeliverySlip.java)）。
 
 **什么是值对象？**
 值对象是通过其属性值来标识的对象，而不是通过唯一标识符。值对象是不可变的，一旦创建就不能修改。如果需要修改，就创建一个新的值对象。值对象通常用于描述领域中的概念，如金额、地址、日期范围等。
 
 #### 4. 领域服务（Domain Services）
-[`PricingStrategy`](src/main/java/com/bluemountain/coffee/domain/service/PricingStrategy.java) 用于定价逻辑。
+- [`PricingStrategy`](src/main/java/com/bluemountain/coffee/domain/service/PricingStrategy.java) 用于定价逻辑
+- [`DeliveryBatchService`](src/main/java/com/bluemountain/coffee/domain/service/DeliveryBatchService.java) 用于配送批处理逻辑
 
 **什么是领域服务？**
-当某些业务逻辑不适合放在实体或值对象中时，就使用领域服务。领域服务是无状态的，它执行的操作通常涉及多个领域对象，或者不属于任何特定的领域对象。在本项目中，定价策略就是一种领域服务，因为它涉及多个订单项的计算。
+当某些业务逻辑不适合放在实体或值对象中时，就使用领域服务。领域服务是无状态的，它执行的操作通常涉及多个领域对象，或者不属于任何特定的领域对象。在本项目中，定价策略和配送批处理服务都是领域服务，因为它们涉及多个订单或配送的计算和协调。
 
 #### 5. 领域事件（Domain Events）
-[`OrderCreatedEvent`](src/main/java/com/bluemountain/coffee/domain/event/OrderCreatedEvent.java)、[`CoffeeReadyEvent`](src/main/java/com/bluemountain/coffee/domain/event/CoffeeReadyEvent.java) 用于重要的业务事件。
+- 订单相关：[`OrderCreatedEvent`](src/main/java/com/bluemountain/coffee/domain/event/OrderCreatedEvent.java)、[`CoffeeReadyEvent`](src/main/java/com/bluemountain/coffee/domain/event/CoffeeReadyEvent.java)
+- 配送相关：[`DeliveryCreatedEvent`](src/main/java/com/bluemountain/coffee/domain/event/DeliveryCreatedEvent.java)、[`DeliveryAssignedEvent`](src/main/java/com/bluemountain/coffee/domain/event/DeliveryAssignedEvent.java)、[`DeliveryPickedUpEvent`](src/main/java/com/bluemountain/coffee/domain/event/DeliveryPickedUpEvent.java)、[`DeliveryDeliveredEvent`](src/main/java/com/bluemountain/coffee/domain/event/DeliveryDeliveredEvent.java)、[`DeliveryCompletedEvent`](src/main/java/com/bluemountain/coffee/domain/event/DeliveryCompletedEvent.java)
 
 **什么是领域事件？**
-领域事件是在领域内发生的、对业务有意义的事情。领域事件通常用于实现松耦合的系统架构，当某个重要事件发生时，系统可以发布事件，其他部分可以订阅并处理这些事件。在本项目中，订单创建和咖啡准备就绪都是重要的业务事件。
+领域事件是在领域内发生的、对业务有意义的事情。领域事件通常用于实现松耦合的系统架构，当某个重要事件发生时，系统可以发布事件，其他部分可以订阅并处理这些事件。在本项目中，订单创建、咖啡准备就绪以及配送的各个状态变化都是重要的业务事件。
 
 ### Spring Boot 特性
 
 - **依赖注入**：所有依赖通过构造函数注入
-- **服务层**：[`OrderAppService`](src/main/java/com/bluemountain/coffee/application/OrderAppService.java) 协调用例
-- **REST 控制器**：[`OrderController`](src/main/java/com/bluemountain/coffee/interfaces/web/OrderController.java)、[`PlatformController`](src/main/java/com/bluemountain/coffee/interfaces/platform/PlatformController.java)
-- **事件处理**：[`OrderEventListener`](src/main/java/com/bluemountain/coffee/application/OrderEventListener.java) 处理领域事件
+- **服务层**：[`OrderAppService`](src/main/java/com/bluemountain/coffee/application/OrderAppService.java)、[`DeliveryAppService`](src/main/java/com/bluemountain/coffee/application/DeliveryAppService.java) 协调用例
+- **REST 控制器**：[`OrderController`](src/main/java/com/bluemountain/coffee/interfaces/web/OrderController.java)、[`DeliveryController`](src/main/java/com/bluemountain/coffee/interfaces/web/DeliveryController.java)、[`PlatformController`](src/main/java/com/bluemountain/coffee/interfaces/platform/PlatformController.java)
+- **事件处理**：[`OrderEventListener`](src/main/java/com/bluemountain/coffee/application/OrderEventListener.java)、[`DeliveryEventListener`](src/main/java/com/bluemountain/coffee/application/DeliveryEventListener.java) 处理领域事件
 - **事务管理**：`@Transactional` 确保数据一致性
-- **内存存储**：[`InMemoryOrderRepository`](src/main/java/com/bluemountain/coffee/infrastructure/persistence/InMemoryOrderRepository.java) 用于简化演示
+- **内存存储**：[`InMemoryOrderRepository`](src/main/java/com/bluemountain/coffee/infrastructure/persistence/InMemoryOrderRepository.java)、[`InMemoryDeliveryRepository`](src/main/java/com/bluemountain/coffee/infrastructure/persistence/InMemoryDeliveryRepository.java) 用于简化演示
 
 ### React 前端特性
 
@@ -475,6 +562,90 @@ CREATED → PAID → PREPARING → READY → COMPLETED
                  ↓
               CANCELLED
 ```
+
+### 配送状态流转
+
+```
+CREATED → ASSIGNED → PICKED_UP → IN_TRANSIT → DELIVERED → COMPLETED
+           ↓
+        CANCELLED
+```
+
+## 📦 配送管理功能
+
+### 配送生命周期管理
+
+系统提供完整的配送生命周期管理，支持以下状态转换：
+
+1. **已创建 (CREATED)** - 配送批次创建完成，等待分配骑手
+2. **已分配 (ASSIGNED)** - 骑手已分配，准备取货
+3. **已取货 (PICKED_UP)** - 骑手已取货，开始配送
+4. **配送中 (IN_TRANSIT)** - 配送途中
+5. **已送达 (DELIVERED)** - 已送达客户
+6. **已完成 (COMPLETED)** - 配送流程完成
+7. **已取消 (CANCELLED)** - 配送取消（仅在取货前可取消）
+
+### 配送批处理功能
+
+系统支持智能配送批处理，优化配送效率：
+
+- **地理位置优先**：相同地址的订单优先合并
+- **时间窗口**：15分钟内的订单可合并
+- **容量限制**：每个配送批次最多包含5个订单
+- **自动批处理**：订单准备就绪时自动触发批处理
+- **手动批处理**：支持手动创建配送批次
+
+### 配送查询功能
+
+系统提供多种查询方式：
+
+- 根据 ID 查询配送
+- 根据状态查询配送
+- 根据骑手查询配送
+- 根据订单 ID 查询配送
+- 查询所有活跃配送
+- 查询日期范围内的配送
+- 查询所有配送
+
+### 配送事件驱动架构
+
+系统采用事件驱动架构，配送过程中的关键状态变化会发布领域事件：
+
+- [`DeliveryCreatedEvent`](src/main/java/com/bluemountain/coffee/domain/event/DeliveryCreatedEvent.java) - 配送创建事件
+- [`DeliveryAssignedEvent`](src/main/java/com/bluemountain/coffee/domain/event/DeliveryAssignedEvent.java) - 骑手分配事件
+- [`DeliveryPickedUpEvent`](src/main/java/com/bluemountain/coffee/domain/event/DeliveryPickedUpEvent.java) - 取货事件
+- [`DeliveryDeliveredEvent`](src/main/java/com/bluemountain/coffee/domain/event/DeliveryDeliveredEvent.java) - 送达事件
+- [`DeliveryCompletedEvent`](src/main/java/com/bluemountain/coffee/domain/event/DeliveryCompletedEvent.java) - 完成事件
+
+这些事件由 [`DeliveryEventListener`](src/main/java/com/bluemountain/coffee/application/DeliveryEventListener.java) 处理，用于日志记录、通知等后续处理。
+
+### 配送聚合设计
+
+[`Delivery`](src/main/java/com/bluemountain/coffee/domain/model/aggregate/Delivery.java) 作为聚合根，包含以下实体和值对象：
+
+**实体：**
+- [`DeliveryItem`](src/main/java/com/bluemountain/coffee/domain/model/aggregate/DeliveryItem.java) - 配送项，代表一个订单
+
+**值对象：**
+- [`DeliveryId`](src/main/java/com/bluemountain/coffee/domain/model/valobj/DeliveryId.java) - 配送唯一标识
+- [`RiderInfo`](src/main/java/com/bluemountain/coffee/domain/model/valobj/RiderInfo.java) - 骑手信息
+- [`DeliverySlip`](src/main/java/com/bluemountain/coffee/domain/model/valobj/DeliverySlip.java) - 配送单（用于打印）
+- [`DeliverySlipItem`](src/main/java/com/bluemountain/coffee/domain/model/valobj/DeliverySlipItem.java) - 配送单项
+
+**枚举：**
+- [`DeliveryStatus`](src/main/java/com/bluemountain/coffee/domain/model/enums/DeliveryStatus.java) - 配送状态
+- [`DeliveryItemStatus`](src/main/java/com/bluemountain/coffee/domain/model/enums/DeliveryItemStatus.java) - 配送项状态
+
+### 配送服务层
+
+- [`DeliveryAppService`](src/main/java/com/bluemountain/coffee/application/DeliveryAppService.java) - 配送应用服务，协调配送相关的业务用例
+- [`DeliveryBatchService`](src/main/java/com/bluemountain/coffee/domain/service/DeliveryBatchService.java) - 配送批处理服务接口
+- [`DeliveryBatchServiceImpl`](src/main/java/com/bluemountain/coffee/infrastructure/service/DeliveryBatchServiceImpl.java) - 配送批处理服务实现
+
+### 配送仓储层
+
+- [`DeliveryRepository`](src/main/java/com/bluemountain/coffee/domain/repository/DeliveryRepository.java) - 配送仓储接口
+- [`InMemoryDeliveryRepository`](src/main/java/com/bluemountain/coffee/infrastructure/persistence/InMemoryDeliveryRepository.java) - 配送内存仓储实现
 
 ## 🧪 测试
 
@@ -514,6 +685,10 @@ npm run lint
 4. **如何有效使用 Spring Boot 特性**
 5. **如何处理领域事件并实现事件驱动架构**
 6. **如何创建具有良好错误处理的干净 REST API**
+7. **如何实现复杂的聚合根和实体关系**
+8. **如何设计和管理状态机（订单和配送状态流转）**
+9. **如何实现批处理和优化业务流程**
+10. **如何通过领域事件实现解耦的系统架构**
 
 ### 前端学习要点
 
@@ -544,7 +719,9 @@ npm run lint
 3. **第三步**：学习设计模式的实现，理解每个模式解决的问题
 4. **第四步**：查看应用服务层，理解如何协调领域对象完成业务用例
 5. **第五步**：研究控制器层，理解如何暴露 REST API
-6. **第六步**：运行项目，通过 API 测试各个功能
+6. **第六步**：学习配送模块，理解复杂的聚合根设计和状态管理
+7. **第七步**：研究事件驱动架构，理解领域事件的发布和订阅机制
+8. **第八步**：运行项目，通过 API 测试各个功能
 
 ### 前端学习路径
 
@@ -580,6 +757,13 @@ npm run lint
 - `mvn test` - 运行测试
 
 ## 📚 相关文档
+
+### 项目文档
+
+- [`Delivery_IMPLEMENTATION_SUMMARY.md`](plans/Delivery_IMPLEMENTATION_SUMMARY.md) - 配送批处理架构实现总结
+- [`delivery-batch-architecture.md`](plans/delivery-batch-architecture.md) - 配送批处理架构设计文档
+- [`implementation-plan.md`](plans/implementation-plan.md) - 项目实施计划
+- [`react-frontend-architecture.md`](plans/react-frontend-architecture.md) - React 前端架构设计
 
 ### 后端文档
 
@@ -637,6 +821,20 @@ npm run lint
 1. 确保所有依赖已安装（`npm install`）
 2. 检查 TypeScript 配置
 3. 清理 `node_modules` 并重新安装
+
+## 🎯 配送管理实现成果
+
+配送管理模块的成功实现带来了以下收益：
+
+1. **✅ 完整的可追溯性** - 从创建到完成的每个配送环节都可追踪
+2. **✅ 批处理优化** - 智能合并订单，提高配送效率
+3. **✅ 骑手管理** - 跟踪骑手分配和绩效
+4. **✅ 分析就绪** - 查询配送历史，获取业务洞察
+5. **✅ 灵活性** - 易于添加新的配送功能
+6. **✅ DDD 合规** - 正确的聚合边界和领域建模
+7. **✅ 事件驱动** - 使用领域事件的解耦架构
+8. **✅ REST API** - 完整的配送管理 CRUD 操作
+9. **✅ 测试覆盖** - 全面的单元测试覆盖
 
 ## 🤝 贡献
 
